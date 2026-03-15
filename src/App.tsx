@@ -8,6 +8,7 @@ import { OrderTrackingPage } from '@/pages/OrderTrackingPage';
 import { KitchenDisplayPage } from '@/pages/KitchenDisplayPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
+import { SampleQRPage } from '@/pages/SampleQRPage';
 
 export function App() {
   return (
@@ -22,6 +23,7 @@ export function App() {
         <Route path="/kitchen" element={<KitchenDisplayPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
+        <Route path="/sample-qr" element={<SampleQRPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>

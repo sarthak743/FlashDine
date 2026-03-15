@@ -1,167 +1,178 @@
-import { useEffect, useRef, useState } from 'react';
-import { Camera, X, CheckCircle } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Camera, X, CheckCircle, QrCode } from 'lucide-react';
+import jsQR from 'jsqr';
 
 interface QRScannerProps {
-  onScan: (tableId: string) => void;
+  onScan: (data: string) => void;
   onClose: () => void;
 }
 
 export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [scanning, setScanning] = useState(true);
-  const [scannedId, setScannedId] = useState<string | null>(null);
+  const animFrameRef = useRef<number>(0);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [scannedData, setScannedData] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  const stopCamera = useCallback(() => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  const scanFrame = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) {
+      animFrameRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert',
+    });
+
+    if (code && code.data) {
+      stopCamera();
+      setScannedData(code.data);
+      setTimeout(() => onScan(code.data), 1200);
+      return;
+    }
+
+    animFrameRef.current = requestAnimationFrame(scanFrame);
+  }, [onScan, stopCamera]);
 
   useEffect(() => {
-    if (!scanning) return;
+    let mounted = true;
 
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
         });
-
+        if (!mounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          startScanning();
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play();
+            setIsReady(true);
+            animFrameRef.current = requestAnimationFrame(scanFrame);
+          };
         }
-      } catch (err) {
-        setError('Unable to access camera. Please check permissions.');
-        setScanning(false);
+      } catch (_err) {
+        if (mounted) {
+          setError('Unable to access camera. Please allow camera permissions and try again.');
+        }
       }
     };
 
     startCamera();
 
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = (
-          videoRef.current.srcObject as MediaStream
-        ).getTracks();
-        tracks.forEach((track) => track.stop());
-      }
+      mounted = false;
+      stopCamera();
     };
-  }, [scanning]);
+  }, [scanFrame, stopCamera]);
 
-  // Simple QR code detection using data matrix pattern
-  const startScanning = () => {
-    const scanInterval = setInterval(() => {
-      if (videoRef.current && canvasRef.current && scanning) {
-        const canvas = canvasRef.current;
-        const context = canvas.getContext('2d');
-
-        if (context) {
-          canvas.width = videoRef.current.videoWidth;
-          canvas.height = videoRef.current.videoHeight;
-
-          context.drawImage(videoRef.current, 0, 0);
-
-          // Simulate QR code detection
-          // In production, you would use a proper QR code library like jsQR
-          // For now, we'll detect dark areas that might be QR codes
-          const imageData = context.getImageData(
-            0,
-            0,
-            canvas.width,
-            canvas.height
-          );
-          const data = imageData.data;
-
-          let darkPixels = 0;
-          for (let i = 0; i < data.length; i += 4) {
-            const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-            if (brightness < 128) darkPixels++;
-          }
-
-          // If we detect a significant dark area pattern, simulate successful scan
-          if (darkPixels > data.length * 0.15) {
-            // Generate a demo table ID
-            const tableId = `${Math.floor(Math.random() * 90) + 10}`;
-            setScannedId(tableId);
-            setScanning(false);
-
-            setTimeout(() => {
-              onScan(tableId);
-            }, 1500);
-          }
-        }
-      }
-    }, 500);
-
-    return () => clearInterval(scanInterval);
+  const handleClose = () => {
+    stopCamera();
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/95 flex flex-col items-center justify-center z-50 p-4">
       {/* Close Button */}
       <button
-        onClick={onClose}
-        className="absolute top-4 right-4 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full transition-colors"
+        onClick={handleClose}
+        className="absolute top-4 right-4 bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-full transition-colors z-10"
       >
         <X className="w-6 h-6" />
       </button>
 
       <div className="w-full max-w-md">
-        {scannedId ? (
-          // Success State
-          <div className="text-center">
+        {scannedData ? (
+          // Success State - show only sanitized, truncated data
+          <div className="text-center animate-fade-in-scale">
             <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" />
-            <h2 className="text-white text-2xl font-bold mb-2">
-              QR Code Scanned!
-            </h2>
-            <p className="text-zinc-300 mb-6">
-              Table <span className="text-orange-400 font-bold text-xl">{scannedId}</span>
-            </p>
+            <h2 className="text-white text-2xl font-bold mb-2">QR Code Scanned!</h2>
+            <div className="bg-zinc-800/70 border border-zinc-700 rounded-xl px-4 py-3 mb-4 inline-block">
+              <p className="text-orange-400 font-mono text-sm break-all max-w-xs">
+                {scannedData.slice(0, 80)}{scannedData.length > 80 ? '…' : ''}
+              </p>
+            </div>
             <p className="text-zinc-400 text-sm">Redirecting to menu...</p>
           </div>
         ) : (
           // Scanner View
           <div className="space-y-4">
-            <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-orange-500/50">
+            <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-orange-500/50 aspect-square max-h-72">
               <video
                 ref={videoRef}
-                className="w-full h-64 object-cover"
+                className="w-full h-full object-cover"
                 playsInline
+                muted
               />
 
-              {/* Scanner Grid Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-48 h-48 border-2 border-orange-500 rounded-2xl relative">
-                  <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-orange-500"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-orange-500"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-orange-500"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-orange-500"></div>
+              {/* Scanner Frame Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                {/* Dark corners outside the scan area */}
+                <div className="absolute inset-0 bg-black/40" />
+                <div className="relative w-52 h-52 bg-transparent z-10">
+                  {/* Corner markers */}
+                  <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-orange-400 rounded-tl-md" />
+                  <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-orange-400 rounded-tr-md" />
+                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-orange-400 rounded-bl-md" />
+                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-orange-400 rounded-br-md" />
+                  {/* Animated scan line */}
+                  <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-orange-400 to-transparent animate-bounce top-1/2" />
                 </div>
               </div>
 
-              {/* Scanning Line Animation */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-48 h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent animate-pulse"></div>
-              </div>
+              {/* Loading overlay when camera not ready */}
+              {!isReady && !error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+                  <div className="text-center">
+                    <Camera className="w-10 h-10 text-orange-400 mx-auto mb-2 animate-pulse" />
+                    <p className="text-zinc-400 text-sm">Starting camera…</p>
+                  </div>
+                </div>
+              )}
 
               <canvas ref={canvasRef} className="hidden" />
             </div>
 
             <div className="text-center">
-              <h2 className="text-white text-xl font-bold mb-2 flex items-center justify-center gap-2">
-                <Camera className="w-5 h-5" />
-                Scan QR Code
+              <h2 className="text-white text-xl font-bold mb-1 flex items-center justify-center gap-2">
+                <QrCode className="w-5 h-5 text-orange-400" />
+                Scan Restaurant QR Code
               </h2>
-              <p className="text-zinc-400">
-                Point your camera at the table QR code
+              <p className="text-zinc-400 text-sm">
+                Point your camera at a FlashDine table QR code
               </p>
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                 <p className="text-red-400 text-sm text-center">{error}</p>
               </div>
             )}
 
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors"
             >
               Cancel

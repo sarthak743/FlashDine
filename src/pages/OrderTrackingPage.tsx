@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Header } from '@/components/Header';
+import { UPIPaymentModal } from '@/components/UPIPaymentModal';
 import { useStore } from '@/store/useStore';
-import { CheckCircle2, Clock, ChefHat, Bell, ArrowRight, Loader2, AlertCircle, CreditCard, Printer, Ban } from 'lucide-react';
+import { CheckCircle2, Clock, ChefHat, Bell, ArrowRight, AlertCircle, CreditCard, Printer, Ban } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { Order } from '@/types';
+import { getOrder, type ApiOrder } from '@/utils/api';
 
 const statusSteps = [
   { key: 'received', label: 'Order Received', icon: CheckCircle2, description: 'Your order has been received' },
@@ -14,23 +15,64 @@ const statusSteps = [
 
 export function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { orders, getOrderById, markOrderAsPaid } = useStore();
-  const [order, setOrder] = useState<Order | undefined>();
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const { orders, markOrderAsPaid } = useStore();
+  const [showUPIModal, setShowUPIModal] = useState(false);
+  const [apiOrder, setApiOrder] = useState<ApiOrder | null>(null);
+
+  // Prefer the live backend state; fall back to local Zustand store.
+  const localOrder = orders.find((o) => o.id === orderId);
+
+  const fetchOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      const data = await getOrder(orderId);
+      setApiOrder(data);
+    } catch {
+      // Backend not reachable — local order still displayed.
+    }
+  }, [orderId]);
 
   useEffect(() => {
-    if (orderId) {
-      setOrder(getOrderById(orderId));
-    }
-  }, [orderId, orders, getOrderById]);
+    fetchOrder();
+    // Poll every 10 seconds so status/payment updates appear in near-real-time.
+    const interval = setInterval(fetchOrder, 10_000);
+    return () => clearInterval(interval);
+  }, [fetchOrder]);
 
-  const handleProceedToPayment = async () => {
-    if (!orderId) return;
-    setIsProcessingPayment(true);
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    markOrderAsPaid(orderId);
-    setIsProcessingPayment(false);
+  // Merge: backend data takes priority for live fields.
+  const order = apiOrder
+    ? {
+        ...localOrder,
+        id: apiOrder.id,
+        receiptId: apiOrder.receiptId,
+        tableId: apiOrder.tableId,
+        customerDetails: apiOrder.customerDetails,
+        items: apiOrder.items,
+        total: apiOrder.total,
+        status: apiOrder.status,
+        paymentMethod: apiOrder.paymentMethod,
+        isPaid: apiOrder.isPaid,
+        estimatedTime: apiOrder.estimatedTime,
+        receiptBannedAt: apiOrder.receiptBannedAt ? new Date(apiOrder.receiptBannedAt) : undefined,
+        createdAt: new Date(apiOrder.createdAt),
+        updatedAt: new Date(apiOrder.updatedAt),
+      }
+    : localOrder;
+
+  const handleProceedToPayment = () => {
+    if (!orderId || !order) return;
+    if (order.paymentMethod === 'upi') {
+      setShowUPIModal(true);
+    } else {
+      // Counter payment – mark as paid
+      markOrderAsPaid(orderId);
+    }
+  };
+
+  const handleUPISuccess = () => {
+    if (orderId) markOrderAsPaid(orderId);
+    setApiOrder((prev) => prev ? { ...prev, isPaid: true } : prev);
+    setShowUPIModal(false);
   };
 
   if (!order) {
@@ -293,20 +335,12 @@ export function OrderTrackingPage() {
         {order.estimatedTime && !order.isPaid ? (
           <button
             onClick={handleProceedToPayment}
-            disabled={isProcessingPayment}
-            className="flex items-center justify-center gap-2 w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white font-bold py-4 px-6 rounded-2xl transition-all active:scale-[0.98] shadow-xl shadow-blue-500/30"
+            className="flex items-center justify-center gap-2 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-2xl transition-all active:scale-[0.98] shadow-xl shadow-blue-500/30"
           >
-            {isProcessingPayment ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Processing Payment...
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-5 h-5" />
-                Proceed to Payment • ₹{order.total}
-              </>
-            )}
+            <CreditCard className="w-5 h-5" />
+            {order.paymentMethod === 'upi'
+              ? `Pay via UPI • ₹${order.total}`
+              : `Pay at Counter • ₹${order.total}`}
           </button>
         ) : (
           <Link
@@ -318,6 +352,16 @@ export function OrderTrackingPage() {
           </Link>
         )}
       </div>
+
+      {/* UPI Payment Modal (for UPI orders) */}
+      {showUPIModal && order && (
+        <UPIPaymentModal
+          amount={order.total}
+          orderId={order.id}
+          onSuccess={handleUPISuccess}
+          onClose={() => setShowUPIModal(false)}
+        />
+      )}
     </div>
   );
 }

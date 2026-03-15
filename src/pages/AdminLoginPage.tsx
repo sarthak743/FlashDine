@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, ChefHat } from 'lucide-react';
+import { Lock, ChefHat, Loader2 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { adminLogin, setAdminToken } from '@/utils/api';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -10,26 +11,23 @@ export function AdminLoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Default admin password (should be changed to environment variable in production)
-  const ADMIN_PASSWORD = 'admin123';
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate loading
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    if (password === ADMIN_PASSWORD) {
+    try {
+      const { token } = await adminLogin(password);
+      // Store JWT in memory via the API client module
+      setAdminToken(token);
       setIsAdmin(true);
       navigate('/admin-dashboard');
-    } else {
-      setError('Invalid password');
+    } catch {
+      setError('Invalid password. Please try again.');
       setPassword('');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -58,6 +56,7 @@ export function AdminLoginPage() {
             </label>
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter admin password"
@@ -77,9 +76,16 @@ export function AdminLoginPage() {
           <button
             type="submit"
             disabled={isLoading || !password}
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-orange-500/50 disabled:to-orange-600/50 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-[0.98] disabled:cursor-not-allowed shadow-xl shadow-orange-500/30"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-orange-500/50 disabled:to-orange-600/50 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-[0.98] disabled:cursor-not-allowed shadow-xl shadow-orange-500/30"
           >
-            {isLoading ? 'Logging in...' : 'Login'}
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Logging in…
+              </>
+            ) : (
+              'Login'
+            )}
           </button>
         </form>
 

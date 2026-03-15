@@ -25,8 +25,15 @@ export function LandingPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleQRScan = (tableId: string) => {
-    navigate(`/menu?table=${tableId}`);
+  const handleQRScan = (data: string) => {
+    // data is "restaurant_id:table_id" or just a table id
+    const parts = data.split(':');
+    if (parts.length === 2) {
+      const [restaurantId, tableIdFromQR] = parts;
+      navigate(`/menu?table=${tableIdFromQR}&restaurant=${restaurantId}`);
+    } else {
+      navigate(`/menu?table=${data}`);
+    }
   };
 
   // Get active orders for current table
@@ -78,8 +85,9 @@ export function LandingPage() {
       </div>
 
       <div className="relative z-10 min-h-screen flex flex-col">
-      {/* Header with Admin Login */}
-      <div className="flex justify-end p-6 animate-fade-in">
+      {/* Header: Admin Login */}
+      <div className="flex justify-end items-center p-6 animate-fade-in">
+        {/* Admin Link */}
         <Link
           to="/admin-login"
           className="glass-card hover:bg-zinc-800/80 text-zinc-400 hover:text-white px-5 py-2.5 rounded-xl transition-all text-sm border border-zinc-700/50 hover:border-orange-500/50 hover:shadow-lg hover:shadow-orange-500/20 flex items-center gap-2 group"
@@ -104,7 +112,7 @@ export function LandingPage() {
         <h1 className="text-6xl font-black text-white mb-4 animate-fade-in-scale tracking-tight" style={{ animationDelay: '0.4s' }}>
           Flash<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 animate-gradient">Dine</span>
         </h1>
-        
+
         {/* Typing Effect Tagline */}
         <div className="h-8 mb-2 animate-fade-in" style={{ animationDelay: '0.6s' }}>
           <p className="text-zinc-400 text-lg font-medium inline-block">
@@ -158,7 +166,7 @@ export function LandingPage() {
               </div>
             </div>
             <h3 className="text-white font-bold text-sm mb-2">Easy Pay</h3>
-            <p className="text-zinc-500 text-xs leading-relaxed">Quick checkout with multiple payment options</p>
+            <p className="text-zinc-500 text-xs leading-relaxed">GPay, PhonePe, Paytm & UPI supported</p>
           </div>
         </div>
         
@@ -246,6 +254,19 @@ export function LandingPage() {
               <span className="text-lg">Scan QR Code to Order</span>
             </div>
           </button>
+
+          {/* View Sample QR */}
+          <Link
+            to="/sample-qr"
+            className="relative block w-full glass-card hover:bg-zinc-800/80 text-white font-bold py-5 px-8 rounded-2xl transition-all duration-300 active:scale-[0.98] border border-zinc-700/50 hover:border-orange-500/50 animate-slide-up shadow-lg hover:shadow-2xl hover:shadow-orange-500/30 overflow-hidden group"
+            style={{ animationDelay: activeOrders.length > 0 ? '1.88s' : '1.52s' }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-600/0 via-orange-600/10 to-orange-600/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative flex items-center justify-center gap-3">
+              <QrCode className="w-6 h-6 text-orange-400 group-hover:scale-110 transition-transform" />
+              <span className="text-lg">View Sample QR Codes</span>
+            </div>
+          </Link>
 
           <Link
             to="/menu?table=12"
