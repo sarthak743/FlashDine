@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
+import { UPIPaymentModal } from '@/components/UPIPaymentModal';
 import { useStore } from '@/store/useStore';
 import { ArrowLeft, Smartphone, Banknote, Check, Loader2, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -9,29 +10,24 @@ type PaymentMethod = 'upi' | 'counter';
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, tableId, clearCart, addOrder, customerDetails } = useStore();
+  const { cart, tableId, clearCart, addOrder, markOrderAsPaid, customerDetails } = useStore();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [showUPIModal, setShowUPIModal] = useState(false);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
 
-  const handlePlaceOrder = async () => {
-    if (!customerDetails) {
-      navigate('/customer-details');
-      return;
-    }
-
-    setIsProcessing(true);
-    
+  const createOrder = () => {
     const orderId = `FD${Date.now().toString().slice(-6)}`;
     const receiptId = `RCP${Date.now().toString().slice(-8)}`;
     const newOrder = {
       id: orderId,
       receiptId,
       tableId: tableId || 'unknown',
-      customerDetails,
+      customerDetails: customerDetails!,
       items: cart,
       total,
       status: 'received' as const,
@@ -40,14 +36,52 @@ export function CheckoutPage() {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
     addOrder(newOrder);
-    clearCart();
-    setIsProcessing(false);
-    navigate(`/track/${orderId}`);
+    return orderId;
   };
 
-  if (cart.length === 0) {
+  const handlePlaceOrder = async () => {
+    if (!customerDetails) {
+      navigate('/customer-details');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    if (paymentMethod === 'upi') {
+      // Create order first, then show UPI payment
+      const orderId = createOrder();
+      setPendingOrderId(orderId);
+      setIsProcessing(false);
+      setShowUPIModal(true);
+    } else {
+      // Pay at counter – place order immediately
+      const orderId = createOrder();
+      clearCart();
+      setIsProcessing(false);
+      navigate(`/track/${orderId}`);
+    }
+  };
+
+  const handleUPISuccess = () => {
+    if (pendingOrderId) {
+      markOrderAsPaid(pendingOrderId);
+    }
+    clearCart();
+    setShowUPIModal(false);
+    navigate(`/track/${pendingOrderId}`);
+  };
+
+  const handleUPIClose = () => {
+    // Order already created; user can pay at counter or retry
+    setShowUPIModal(false);
+    if (pendingOrderId) {
+      clearCart();
+      navigate(`/track/${pendingOrderId}`);
+    }
+  };
+
+  if (cart.length === 0 && !pendingOrderId) {
     navigate('/menu');
     return null;
   }
@@ -159,6 +193,7 @@ export function CheckoutPage() {
         <div className="bg-zinc-800/50 rounded-xl p-4 border border-zinc-700/50">
           <h3 className="text-white font-semibold mb-3">Payment Method</h3>
           <div className="space-y-3">
+            {/* UPI (GPay / PhonePe / Paytm) */}
             <button
               onClick={() => setPaymentMethod('upi')}
               className={cn(
@@ -169,20 +204,27 @@ export function CheckoutPage() {
               )}
             >
               <div className={cn(
-                'w-12 h-12 rounded-xl flex items-center justify-center',
+                'w-12 h-12 rounded-xl flex items-center justify-center text-xl',
                 paymentMethod === 'upi' ? 'bg-orange-500' : 'bg-zinc-700'
               )}>
                 <Smartphone className="w-6 h-6 text-white" />
               </div>
               <div className="flex-1 text-left">
-                <p className="text-white font-medium">UPI Payment</p>
-                <p className="text-zinc-400 text-sm">Pay using any UPI app</p>
+                <p className="text-white font-medium">UPI / GPay / PhonePe</p>
+                <p className="text-zinc-400 text-sm">Pay instantly with any UPI app</p>
+                {/* App logos row */}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-medium">GPay</span>
+                  <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-medium">PhonePe</span>
+                  <span className="text-xs bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-medium">Paytm</span>
+                </div>
               </div>
               {paymentMethod === 'upi' && (
-                <Check className="w-6 h-6 text-orange-400" />
+                <Check className="w-6 h-6 text-orange-400 flex-shrink-0" />
               )}
             </button>
             
+            {/* Pay at Counter */}
             <button
               onClick={() => setPaymentMethod('counter')}
               className={cn(
@@ -200,7 +242,7 @@ export function CheckoutPage() {
               </div>
               <div className="flex-1 text-left">
                 <p className="text-white font-medium">Pay at Counter</p>
-                <p className="text-zinc-400 text-sm">Pay when collecting order</p>
+                <p className="text-zinc-400 text-sm">Cash or card when collecting order</p>
               </div>
               {paymentMethod === 'counter' && (
                 <Check className="w-6 h-6 text-orange-400" />
@@ -227,6 +269,16 @@ export function CheckoutPage() {
           )}
         </button>
       </div>
+
+      {/* UPI Payment Modal */}
+      {showUPIModal && pendingOrderId && (
+        <UPIPaymentModal
+          amount={total}
+          orderId={pendingOrderId}
+          onSuccess={handleUPISuccess}
+          onClose={handleUPIClose}
+        />
+      )}
     </div>
   );
 }
