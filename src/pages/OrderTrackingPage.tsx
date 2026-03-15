@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { UPIPaymentModal } from '@/components/UPIPaymentModal';
 import { useStore } from '@/store/useStore';
 import { CheckCircle2, Clock, ChefHat, Bell, ArrowRight, AlertCircle, CreditCard, Printer, Ban } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { getOrder, type ApiOrder } from '@/utils/api';
 
 const statusSteps = [
   { key: 'received', label: 'Order Received', icon: CheckCircle2, description: 'Your order has been received' },
@@ -16,22 +17,61 @@ export function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { orders, markOrderAsPaid } = useStore();
   const [showUPIModal, setShowUPIModal] = useState(false);
+  const [apiOrder, setApiOrder] = useState<ApiOrder | null>(null);
 
-  // Derive order directly from the store (no useEffect needed – avoids "not found" flash)
-  const order = orders.find((o) => o.id === orderId);
+  // Prefer the live backend state; fall back to local Zustand store.
+  const localOrder = orders.find((o) => o.id === orderId);
+
+  const fetchOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      const data = await getOrder(orderId);
+      setApiOrder(data);
+    } catch {
+      // Backend not reachable — local order still displayed.
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    fetchOrder();
+    // Poll every 10 seconds so status/payment updates appear in near-real-time.
+    const interval = setInterval(fetchOrder, 10_000);
+    return () => clearInterval(interval);
+  }, [fetchOrder]);
+
+  // Merge: backend data takes priority for live fields.
+  const order = apiOrder
+    ? {
+        ...localOrder,
+        id: apiOrder.id,
+        receiptId: apiOrder.receiptId,
+        tableId: apiOrder.tableId,
+        customerDetails: apiOrder.customerDetails,
+        items: apiOrder.items,
+        total: apiOrder.total,
+        status: apiOrder.status,
+        paymentMethod: apiOrder.paymentMethod,
+        isPaid: apiOrder.isPaid,
+        estimatedTime: apiOrder.estimatedTime,
+        receiptBannedAt: apiOrder.receiptBannedAt ? new Date(apiOrder.receiptBannedAt) : undefined,
+        createdAt: new Date(apiOrder.createdAt),
+        updatedAt: new Date(apiOrder.updatedAt),
+      }
+    : localOrder;
 
   const handleProceedToPayment = () => {
     if (!orderId || !order) return;
     if (order.paymentMethod === 'upi') {
       setShowUPIModal(true);
     } else {
-      // Counter payment – mark as paid immediately
+      // Counter payment – mark as paid
       markOrderAsPaid(orderId);
     }
   };
 
   const handleUPISuccess = () => {
     if (orderId) markOrderAsPaid(orderId);
+    setApiOrder((prev) => prev ? { ...prev, isPaid: true } : prev);
     setShowUPIModal(false);
   };
 

@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "cd server && npm run dev",
+    "dev:all": "concurrently --names \"frontend,backend\" --prefix-colors \"cyan,green\" \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.13.4",
     "clsx": "2.1.1",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.563.0",
@@ -26,9 +27,9 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
+    "concurrently": "^9.2.1",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
-    "vite": "7.2.4",
-    "vite-plugin-singlefile": "2.3.0"
+    "vite": "7.2.4"
   }
 }

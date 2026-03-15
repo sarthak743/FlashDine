@@ -5,6 +5,7 @@ import { UPIPaymentModal } from '@/components/UPIPaymentModal';
 import { useStore } from '@/store/useStore';
 import { ArrowLeft, Smartphone, Banknote, Check, Loader2, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { createOrder } from '@/utils/api';
 
 type PaymentMethod = 'upi' | 'counter';
 
@@ -20,26 +21,6 @@ export function CheckoutPage() {
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
 
-  const createOrder = () => {
-    const orderId = `FD${Date.now().toString().slice(-6)}`;
-    const receiptId = `RCP${Date.now().toString().slice(-8)}`;
-    const newOrder = {
-      id: orderId,
-      receiptId,
-      tableId: tableId || 'unknown',
-      customerDetails: customerDetails!,
-      items: cart,
-      total,
-      status: 'received' as const,
-      paymentMethod,
-      isPaid: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    addOrder(newOrder);
-    return orderId;
-  };
-
   const handlePlaceOrder = async () => {
     if (!customerDetails) {
       navigate('/customer-details');
@@ -48,18 +29,49 @@ export function CheckoutPage() {
 
     setIsProcessing(true);
 
-    if (paymentMethod === 'upi') {
-      // Create order first, then show UPI payment
-      const orderId = createOrder();
-      setPendingOrderId(orderId);
+    const orderId = `FD${Date.now().toString().slice(-6)}`;
+    const receiptId = `RCP${Date.now().toString().slice(-8)}`;
+
+    try {
+      // Persist order to backend
+      const savedOrder = await createOrder({
+        id: orderId,
+        receiptId,
+        tableId: tableId || 'unknown',
+        customerDetails,
+        items: cart,
+        subtotal,
+        tax,
+        total,
+        paymentMethod,
+      });
+
+      // Also keep in local Zustand store for immediate access
+      addOrder({
+        id: savedOrder.id,
+        receiptId: savedOrder.receiptId,
+        tableId: savedOrder.tableId,
+        customerDetails: savedOrder.customerDetails,
+        items: savedOrder.items,
+        total: savedOrder.total,
+        status: savedOrder.status,
+        paymentMethod: savedOrder.paymentMethod,
+        isPaid: savedOrder.isPaid,
+        createdAt: new Date(savedOrder.createdAt),
+        updatedAt: new Date(savedOrder.updatedAt),
+      });
+
+      if (paymentMethod === 'upi') {
+        setPendingOrderId(savedOrder.id);
+        setShowUPIModal(true);
+      } else {
+        clearCart();
+        navigate(`/track/${savedOrder.id}`);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to place order. Please try again.');
+    } finally {
       setIsProcessing(false);
-      setShowUPIModal(true);
-    } else {
-      // Pay at counter – place order immediately
-      const orderId = createOrder();
-      clearCart();
-      setIsProcessing(false);
-      navigate(`/track/${orderId}`);
     }
   };
 
@@ -73,7 +85,6 @@ export function CheckoutPage() {
   };
 
   const handleUPIClose = () => {
-    // Order already created; user can pay at counter or retry
     setShowUPIModal(false);
     if (pendingOrderId) {
       clearCart();

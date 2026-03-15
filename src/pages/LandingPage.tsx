@@ -2,15 +2,12 @@ import { QrCode, ChefHat, Smartphone, Clock, CreditCard, Lock, ArrowRight, Print
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { QRScanner } from '@/components/QRScanner';
-import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useStore } from '@/store/useStore';
-import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/utils/cn';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const { orders, tableId } = useStore();
-  const { user } = useAuth();
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [typedText, setTypedText] = useState('');
   const fullText = "Order smarter. Dine faster.";
@@ -88,11 +85,8 @@ export function LandingPage() {
       </div>
 
       <div className="relative z-10 min-h-screen flex flex-col">
-      {/* Header: Google Sign-In + Admin Login */}
-      <div className="flex justify-between items-center p-6 animate-fade-in">
-        {/* Google Auth */}
-        <GoogleSignInButton />
-
+      {/* Header: Admin Login */}
+      <div className="flex justify-end items-center p-6 animate-fade-in">
         {/* Admin Link */}
         <Link
           to="/admin-login"
@@ -119,14 +113,6 @@ export function LandingPage() {
           Flash<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 animate-gradient">Dine</span>
         </h1>
 
-        {/* Greeting when signed in */}
-        {user && (
-          <div className="flex items-center gap-2 mb-4 bg-zinc-800/60 border border-zinc-700/50 rounded-full px-4 py-2 animate-fade-in">
-            <img src={user.picture} alt={user.name} className="w-6 h-6 rounded-full" />
-            <span className="text-zinc-300 text-sm">Welcome, <span className="text-white font-semibold">{user.name.split(' ')[0] || user.name || 'there'}</span>!</span>
-          </div>
-        )}
-        
         {/* Typing Effect Tagline */}
         <div className="h-8 mb-2 animate-fade-in" style={{ animationDelay: '0.6s' }}>
           <p className="text-zinc-400 text-lg font-medium inline-block">
