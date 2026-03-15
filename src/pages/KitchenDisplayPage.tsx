@@ -34,6 +34,11 @@ export function KitchenDisplayPage() {
       id: orderId,
       receiptId,
       tableId: String(Math.floor(Math.random() * 20) + 1),
+      customerDetails: {
+        name: 'Demo Customer',
+        phone: '9999999999',
+        email: 'demo@flashdine.app',
+      },
       items: demoItems,
       total: 220,
       status: 'received' as const,
@@ -183,11 +188,17 @@ export function KitchenDisplayPage() {
                     <div className="flex items-center gap-2 mb-4">
                       <span className={cn(
                         'px-3 py-1 rounded-full text-xs font-medium',
-                        order.paymentMethod === 'upi' 
+                        order.isPaid
                           ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                          : order.paymentMethod === 'upi'
+                          ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30'
                           : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30'
                       )}>
-                        {order.paymentMethod === 'upi' ? '✓ UPI Paid' : '⏳ Pay at Counter'}
+                        {order.isPaid
+                          ? '✓ Paid'
+                          : order.paymentMethod === 'upi'
+                          ? '⏳ UPI Pending'
+                          : '⏳ Pay at Counter'}
                       </span>
                       <span className="text-zinc-400 text-sm ml-auto">₹{order.total}</span>
                     </div>
