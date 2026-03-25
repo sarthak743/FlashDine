@@ -27,7 +27,7 @@ FlashDine is a full-stack food ordering web application built to deliver a fast,
 - Express.js  
 
 ### Database
-- MongoDB  
+- PostgreSQL
 
 ---
 
