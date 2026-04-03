@@ -1,6 +1,6 @@
 # 🍽️ FlashDine
 
-FlashDine is a full-stack food ordering web application built to deliver a fast, seamless, and intuitive user experience. It allows users to browse food items, add them to a cart, and place orders efficiently. It even reduces the waiting time. 
+FlashDine is a full-stack food ordering web application built to deliver a fast, seamless, and intuitive user experience. It allows users to browse food items, add them to a cart, and place orders efficiently. It even reduces waiting time. 
 
 ---
 
