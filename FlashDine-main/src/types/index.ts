@@ -15,6 +15,12 @@ export interface CartItem extends MenuItem {
   quantity: number;
 }
 
+export interface StockInfo {
+  inStock: boolean;
+  isLimited?: boolean;
+  estimatedRestockTime?: string | null;
+}
+
 export interface CustomerDetails {
   name: string;
   phone: string;

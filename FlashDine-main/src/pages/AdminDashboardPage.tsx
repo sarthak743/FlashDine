@@ -14,7 +14,7 @@ import {
   setEstimatedTime as apiSetEstimatedTime,
   banReceipt as apiBanReceipt,
   logout,
-  verifyToken,
+  verifySession,
   type ApiOrder,
 } from '@/utils/api';
 
@@ -49,7 +49,7 @@ export function AdminDashboardPage() {
       const queryRestaurantId = new URLSearchParams(hashQuery).get('restaurantId') || undefined;
 
       try {
-        const result = await verifyToken();
+        const result = await verifySession();
         const verifiedRestaurantId = result.user?.restaurantId || queryRestaurantId || cachedRestaurantId;
 
         if (!verifiedRestaurantId) {

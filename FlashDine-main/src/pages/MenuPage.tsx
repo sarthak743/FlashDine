@@ -9,7 +9,7 @@ import { restaurants, getRestaurantByQRCode } from '@/data/restaurants';
 import { useStore } from '@/store/useStore';
 import { Category } from '@/types';
 import { Search, Star, Clock, TrendingUp } from 'lucide-react';
-import { cn } from '@/utils/cn';
+
 import { getMenuStock } from '@/utils/api';
 
 export function MenuPage() {

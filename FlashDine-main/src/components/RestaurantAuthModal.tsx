@@ -8,7 +8,6 @@ interface RestaurantAuthModalProps {
   isOpen: boolean;
 }
 
-
 export function RestaurantAuthModal({ onAuthSuccess, isOpen }: RestaurantAuthModalProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState('default');
   
@@ -56,7 +55,7 @@ export function RestaurantAuthModal({ onAuthSuccess, isOpen }: RestaurantAuthMod
 
     try {
       const currentPath = window.location.hash.slice(1) || window.location.pathname || '/kitchen';
-      const { redirectUrl } = await initiateGoogleLogin('login', 'campus-delights', currentPath);
+      const { redirectUrl } = await initiateGoogleLogin('campus-delights', currentPath);
       window.location.href = redirectUrl;
     } catch (err) {
       if (err instanceof ApiError) {

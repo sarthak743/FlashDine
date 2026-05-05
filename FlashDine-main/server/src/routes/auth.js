@@ -52,21 +52,20 @@ function isAllowedFrontendOrigin(origin) {
 
 function decodeGoogleState(stateValue) {
   if (!stateValue || typeof stateValue !== 'string') {
-    return { mode: 'login', restaurantId: DEFAULT_RESTAURANT_ID, frontendOrigin: null, redirectPath: '/kitchen' };
+    return { restaurantId: DEFAULT_RESTAURANT_ID, frontendOrigin: null, redirectPath: '/kitchen' };
   }
 
   try {
     const decoded = JSON.parse(Buffer.from(stateValue, 'base64url').toString('utf8'));
-    const mode = decoded?.mode === 'register' ? 'register' : 'login';
     const restaurantId = normalizeRestaurantId(decoded?.restaurantId);
     const frontendOrigin = normalizeOrigin(decoded?.frontendOrigin);
     const redirectPath = typeof decoded?.redirectPath === 'string'
       && (decoded.redirectPath === '/admin-dashboard' || decoded.redirectPath === '/kitchen')
       ? decoded.redirectPath
       : '/kitchen';
-    return { mode, restaurantId, frontendOrigin, redirectPath };
+    return { restaurantId, frontendOrigin, redirectPath };
   } catch {
-    return { mode: 'login', restaurantId: DEFAULT_RESTAURANT_ID, frontendOrigin: null, redirectPath: '/kitchen' };
+    return { restaurantId: DEFAULT_RESTAURANT_ID, frontendOrigin: null, redirectPath: '/kitchen' };
   }
 }
 
@@ -100,7 +99,6 @@ const manualLoginSchema = z.object({
 });
 
 const googleLoginSchema = z.object({
-  mode: z.literal('login'),
   restaurantId: z.string().optional(),
   redirectPath: z.string().optional(),
 });
@@ -165,8 +163,8 @@ function registerAuthRoutes(app) {
 
   /**
    * POST /api/auth/login/google/initiate
-   * Initiate Google OAuth for login or register.
-   * Body: { mode: 'login' | 'register', restaurantId?: string }
+   * Initiate Google OAuth for login.
+   * Body: { restaurantId?: string }
    */
   app.post('/api/auth/login/google/initiate', async (req, res) => {
     const parsed = googleLoginSchema.safeParse(req.body);
@@ -175,7 +173,6 @@ function registerAuthRoutes(app) {
       return res.status(400).json({ error: `Validation error: ${errorMsg}` });
     }
 
-    const { mode } = parsed.data;
     const restaurantId = normalizeRestaurantId(parsed.data.restaurantId);
     const redirectPath = parsed.data.redirectPath || '/kitchen';
     if (!hasGoogleStrategy()) {
@@ -188,7 +185,6 @@ function registerAuthRoutes(app) {
     const frontendOrigin = originFromRequest || FRONTEND_URL;
 
     const state = encodeGoogleState({
-      mode,
       restaurantId,
       frontendOrigin,
       redirectPath,

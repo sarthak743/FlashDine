@@ -2,21 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
-const jwt = require('jsonwebtoken');
-
 const router = Router();
-
-// Require JWT_SECRET to be explicitly set in production.
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('[auth] JWT_SECRET environment variable must be set in production');
-  }
-  console.warn('[auth] WARNING: JWT_SECRET not set — using insecure default. Set JWT_SECRET before going to production.');
-}
-const JWT_SIGNING_SECRET = JWT_SECRET || 'flashdine_dev_secret_do_not_use_in_production';
-
-const JWT_EXPIRES_IN = '8h'; // admin session lasts 8 hours
 
 // Default hashed password for "admin123" — always override via ADMIN_PASSWORD_HASH env var.
 // Generate your own: node -e "require('bcryptjs').hash('yourpassword',12).then(console.log)"
@@ -35,7 +21,7 @@ const loginSchema = z.object({
 /**
  * POST /api/auth/login
  * Body: { password: string }
- * Returns: { token: string, expiresIn: string }
+ * Returns: { success: boolean }
  */
 router.post('/login', async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -60,9 +46,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return;
   }
 
-  const token = jwt.sign({ role: 'admin' }, JWT_SIGNING_SECRET, { expiresIn: JWT_EXPIRES_IN });
-
-  res.json({ token, expiresIn: JWT_EXPIRES_IN });
+  res.json({ success: true });
 });
 
 export default router;

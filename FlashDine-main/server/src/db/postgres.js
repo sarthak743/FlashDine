@@ -63,6 +63,11 @@ async function initializeSchema() {
       );
     `);
 
+    // Add updated_at if missing (for backward compatibility)
+    await client.query(`
+      ALTER TABLE admins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+
     // Create index on email for faster lookups
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
@@ -94,6 +99,13 @@ async function initializeSchema() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (restaurant_id, item_id)
       );
+    `);
+
+    // Migration for new columns
+    await client.query(`
+      ALTER TABLE menu_stock
+      ADD COLUMN IF NOT EXISTS is_limited BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS estimated_restock_time VARCHAR(255);
     `);
 
     console.log('[PostgreSQL] Schema initialized successfully');
@@ -159,12 +171,7 @@ async function createAdminManual(restaurantId, email, passwordHash) {
   return result.rows[0];
 }
 
-/**
- * Create or log in admin with Google OAuth.
- * - Login: existing Google account or existing email account can be linked.
- * - Register: requires restaurantId and creates a new admin row.
- */
-async function upsertAdminGoogle(googleId, email, restaurantId, isRegistrationIntent = false) {
+async function upsertAdminGoogle(googleId, email, restaurantId) {
   const targetRestaurantId = restaurantId || 'default';
   const existingByGoogle = await getAdminByGoogleId(googleId);
   if (existingByGoogle) {
@@ -180,50 +187,34 @@ async function upsertAdminGoogle(googleId, email, restaurantId, isRegistrationIn
     return result.rows[0];
   }
 
-  if (!isRegistrationIntent) {
-    // Login path: allow only emails that already exist in admins table.
-    const existingByEmail = await pool.query(
-      `SELECT id, restaurant_id, email, password_hash, oauth_google_id, oauth_google_email
-       FROM admins
-       WHERE email = $1
-       ORDER BY CASE WHEN restaurant_id = $2 THEN 0 ELSE 1 END, created_at ASC
-       LIMIT 1`,
-      [email, targetRestaurantId]
-    );
-
-    if (existingByEmail.rows[0]) {
-      const linked = await pool.query(
-        `UPDATE admins
-         SET oauth_google_id = $1,
-             oauth_google_email = $2,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3
-         RETURNING id, restaurant_id, email, password_hash, oauth_google_id, oauth_google_email`,
-        [googleId, email, existingByEmail.rows[0].id]
-      );
-      return linked.rows[0];
-    }
-
-    const error = new Error('Selected Google email is not registered in FlashDine admins.');
-    error.code = 'GOOGLE_NOT_REGISTERED';
-    throw error;
-  }
-
-  if (!restaurantId) {
-    const error = new Error('Restaurant ID is required for Google registration.');
-    error.code = 'RESTAURANT_REQUIRED';
-    throw error;
-  }
-
-  const result = await pool.query(
-    `INSERT INTO admins (restaurant_id, email, password_hash, oauth_google_id, oauth_google_email)
-     VALUES ($1, $2, NULL, $3, $4)
-     RETURNING id, restaurant_id, email, password_hash, oauth_google_id, oauth_google_email`,
-    [restaurantId, email, googleId, email]
+  // Login path: allow only emails that already exist in admins table.
+  const existingByEmail = await pool.query(
+    `SELECT id, restaurant_id, email, password_hash, oauth_google_id, oauth_google_email
+     FROM admins
+     WHERE email = $1
+     ORDER BY CASE WHEN restaurant_id = $2 THEN 0 ELSE 1 END, created_at ASC
+     LIMIT 1`,
+    [email, targetRestaurantId]
   );
-  return result.rows[0];
-}
 
+  if (existingByEmail.rows[0]) {
+    const linked = await pool.query(
+      `UPDATE admins
+       SET oauth_google_id = $1,
+           oauth_google_email = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING id, restaurant_id, email, password_hash, oauth_google_id, oauth_google_email`,
+      [googleId, email, existingByEmail.rows[0].id]
+    );
+    return linked.rows[0];
+  }
+
+  const error = new Error('Selected Google email is not found in FlashDine admins.');
+  error.code = 'GOOGLE_NOT_REGISTERED';
+  error.attempted_email = email;
+  throw error;
+}
 /**
  * Get restaurant by ID
  */
@@ -240,7 +231,7 @@ async function getRestaurantById(restaurantId) {
  */
 async function getMenuStock(restaurantId) {
   const result = await pool.query(
-    `SELECT item_id, in_stock FROM menu_stock WHERE restaurant_id = $1`,
+    `SELECT item_id, in_stock, is_limited, estimated_restock_time FROM menu_stock WHERE restaurant_id = $1`,
     [restaurantId]
   );
   return result.rows;
@@ -249,14 +240,14 @@ async function getMenuStock(restaurantId) {
 /**
  * Upsert stock status for an item
  */
-async function upsertMenuStock(restaurantId, itemId, inStock) {
+async function upsertMenuStock(restaurantId, itemId, inStock, isLimited = false, estimatedRestockTime = null) {
   const result = await pool.query(
-    `INSERT INTO menu_stock (restaurant_id, item_id, in_stock)
-     VALUES ($1, $2, $3)
+    `INSERT INTO menu_stock (restaurant_id, item_id, in_stock, is_limited, estimated_restock_time)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (restaurant_id, item_id)
-     DO UPDATE SET in_stock = $3, updated_at = CURRENT_TIMESTAMP
+     DO UPDATE SET in_stock = $3, is_limited = $4, estimated_restock_time = $5, updated_at = CURRENT_TIMESTAMP
      RETURNING *`,
-    [restaurantId, itemId, inStock]
+    [restaurantId, itemId, inStock, isLimited, estimatedRestockTime]
   );
   return result.rows[0];
 }

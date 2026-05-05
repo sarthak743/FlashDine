@@ -52,7 +52,7 @@ app.use(cors({
     }
   },
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type'],
   credentials: true, // Allow cookies to be sent with requests
 }));
 

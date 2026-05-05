@@ -11,7 +11,10 @@ export function MenuItem({ item }: MenuItemProps) {
   const { cart, addToCart, updateQuantity, menuStock, favoriteItems, toggleFavorite, addToRecentlyOrdered } = useStore();
   const cartItem = cart.find((i) => i.id === item.id);
   const quantity = cartItem?.quantity || 0;
-  const isInStock = menuStock[item.id] ?? item.inStock;
+  const stockInfo = menuStock[item.id] || { inStock: item.inStock };
+  const isInStock = stockInfo.inStock;
+  const isLimited = stockInfo.isLimited;
+  const estimatedRestockTime = stockInfo.estimatedRestockTime;
   const isFavorite = favoriteItems.has(item.id);
 
   const handleAddToCart = () => {
@@ -60,10 +63,22 @@ export function MenuItem({ item }: MenuItemProps) {
         </button>
         
         {!isInStock && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center space-y-2">
             <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
               Sold Out
             </span>
+            {estimatedRestockTime && (
+              <span className="bg-black/80 text-orange-400 text-xs px-2 py-1 rounded-full border border-orange-500/30">
+                Back in: {estimatedRestockTime}
+              </span>
+            )}
+          </div>
+        )}
+        
+        {isInStock && isLimited && (
+          <div className="absolute bottom-2 left-2 bg-amber-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-bold shadow-lg border border-amber-400/50 flex items-center gap-1 animate-pulse">
+            <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
+            Limited Stock
           </div>
         )}
       </div>

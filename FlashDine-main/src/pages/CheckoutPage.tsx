@@ -4,7 +4,7 @@ import { Header } from '@/components/Header';
 import { UPIPaymentModal } from '@/components/UPIPaymentModal';
 import { useStore } from '@/store/useStore';
 import { ArrowLeft, Smartphone, Loader2, Clock, AlertCircle } from 'lucide-react';
-import { cn } from '@/utils/cn';
+
 import { createOrder } from '@/utils/api';
 
 export function CheckoutPage() {
@@ -54,7 +54,7 @@ export function CheckoutPage() {
         token: savedOrder.token,
         tableId: savedOrder.tableId,
         customerDetails: savedOrder.customerDetails,
-        items: savedOrder.items,
+        items: savedOrder.items.map(item => ({ ...item, description: item.description || '' })) as any,
         total: savedOrder.total,
         status: savedOrder.status,
         paymentMethod: savedOrder.paymentMethod,

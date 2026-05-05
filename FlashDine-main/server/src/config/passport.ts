@@ -17,21 +17,19 @@ const GOOGLE_CALLBACK_URL = (process.env.GOOGLE_CALLBACK_URL || DEFAULT_GOOGLE_C
 
 function decodeGoogleState(stateValue: string | null) {
   if (!stateValue) {
-    return { mode: 'login' as const, restaurantId: null as string | null };
+    return { restaurantId: null as string | null };
   }
 
   try {
     const decoded = JSON.parse(Buffer.from(stateValue, 'base64url').toString('utf8')) as {
-      mode?: 'login' | 'register';
       restaurantId?: string | null;
     };
-    const mode = decoded?.mode === 'register' ? 'register' : 'login';
     const restaurantId = typeof decoded?.restaurantId === 'string' && decoded.restaurantId.trim()
       ? decoded.restaurantId
       : null;
-    return { mode, restaurantId };
+    return { restaurantId };
   } catch {
-    return { mode: 'login' as const, restaurantId: null as string | null };
+    return { restaurantId: null as string | null };
   }
 }
 
@@ -128,18 +126,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
             || requestWithSession.session?.googleAuthState
             || null;
 
-          const { mode, restaurantId } = decodeGoogleState(stateRaw);
-
-          if (mode === 'register') {
-            if (!restaurantId) {
-              return done(null, false, { message: 'Restaurant ID is required for Google registration' });
-            }
-
-            const restaurant = await getRestaurantById(restaurantId);
-            if (!restaurant) {
-              return done(null, false, { message: 'Restaurant not found' });
-            }
-          }
+          const { restaurantId } = decodeGoogleState(stateRaw);
 
           const email = profile.emails?.[0]?.value;
           if (!email) {
@@ -149,8 +136,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           const admin = await upsertAdminGoogle(
             profile.id,
             email,
-            restaurantId,
-            mode === 'register'
+            restaurantId
           );
 
           return done(null, {
@@ -161,7 +147,10 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           });
         } catch (err) {
           if ((err as { code?: string })?.code === 'GOOGLE_NOT_REGISTERED') {
-            return done(null, false, { message: 'Google account not registered. Use Google Register first.' });
+            return done(null, false, { 
+              message: 'Selected Google email is not found for admin access.',
+              attempted_email: (err as any).attempted_email 
+            } as any);
           }
           if ((err as { code?: string })?.code === '23505') {
             return done(null, false, { message: 'Restaurant already has an admin account.' });

@@ -4,6 +4,8 @@
  * or to the same origin in production.
  */
 
+import { StockInfo } from '@/types';
+
 const BASE = '/api';
 const DEFAULT_RESTAURANT_ID = 'default';
 const CAMPUS_DELIGHTS_ALIAS = 'campus-delights';
@@ -26,7 +28,7 @@ function normalizeRestaurantId(restaurantId?: string | null): string {
 // ---------------------------------------------------------------------------
 let _restaurantId: string | null = null;
 
-export function setAdminToken(_token: string | null, restaurantId?: string | null) {
+export function setAdminSessionContext(restaurantId?: string | null) {
   if (restaurantId) {
     _restaurantId = normalizeRestaurantId(restaurantId);
     localStorage.setItem('restaurantId', _restaurantId);
@@ -34,11 +36,6 @@ export function setAdminToken(_token: string | null, restaurantId?: string | nul
     _restaurantId = null;
     localStorage.removeItem('restaurantId');
   }
-}
-
-export function getAdminToken(): string | null {
-  // Session auth uses httpOnly cookies. Token is no longer used.
-  return null;
 }
 
 export function getRestaurantId(): string | null {
@@ -104,7 +101,7 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-export interface VerifyTokenResponse {
+export interface VerifySessionResponse {
   authenticated: boolean;
   user?: AuthUser;
 }
@@ -124,44 +121,22 @@ export async function manualLogin(
   });
 
   if (response.user?.restaurantId) {
-    setAdminToken(null, response.user.restaurantId);
+    setAdminSessionContext(response.user.restaurantId);
   }
 
   return response;
 }
 
-/**
- * Manual register with restaurant ID, email, and password
- */
-export async function manualRegister(
-  restaurantId: string,
-  email: string,
-  password: string
-): Promise<LoginResponse> {
-  const registrationRestaurantId = restaurantId || 'default';
-  const response = await request<LoginResponse>('POST', '/auth/register/manual', {
-    restaurantId: registrationRestaurantId,
-    email,
-    password,
-  });
 
-  if (response.user?.restaurantId) {
-    setAdminToken(null, response.user.restaurantId);
-  }
-
-  return response;
-}
 
 /**
- * Initiate Google OAuth for login or register.
+ * Initiate Google OAuth for login.
  */
 export async function initiateGoogleLogin(
-  mode: 'login',
   restaurantId?: string,
   redirectPath?: string
 ): Promise<{ redirectUrl: string }> {
   return request<{ redirectUrl: string }>('POST', '/auth/login/google/initiate', {
-    mode,
     restaurantId,
     redirectPath,
   });
@@ -170,11 +145,11 @@ export async function initiateGoogleLogin(
 /**
  * Verify active session
  */
-export async function verifyToken(): Promise<VerifyTokenResponse> {
+export async function verifySession(): Promise<VerifySessionResponse> {
   try {
-    const result = await request<VerifyTokenResponse>('POST', '/auth/verify');
+    const result = await request<VerifySessionResponse>('POST', '/auth/verify');
     if (result.user?.restaurantId) {
-      setAdminToken(null, result.user.restaurantId);
+      setAdminSessionContext(result.user.restaurantId);
     }
     return result;
   } catch (err) {
@@ -201,12 +176,12 @@ export function adminLogin(password: string) {
 // ---------------------------------------------------------------------------
 // Menu / Stock Management
 // ---------------------------------------------------------------------------
-export async function getMenuStock(restaurantId: string): Promise<Record<string, boolean>> {
-  return request<Record<string, boolean>>('GET', `/menu/stock/${restaurantId}`);
+export async function getMenuStock(restaurantId: string): Promise<Record<string, StockInfo>> {
+  return request<Record<string, StockInfo>>('GET', `/menu/stock/${restaurantId}`);
 }
 
-export async function updateMenuStock(itemId: string, inStock: boolean): Promise<{ success: boolean; itemId: string; inStock: boolean }> {
-  return request<{ success: boolean; itemId: string; inStock: boolean }>('POST', '/menu/stock', { itemId, inStock }, true);
+export async function updateMenuStock(itemId: string, inStock: boolean, isLimited: boolean = false, estimatedRestockTime: string | null = null): Promise<{ success: boolean; itemId: string; inStock: boolean; isLimited: boolean; estimatedRestockTime: string | null }> {
+  return request<{ success: boolean; itemId: string; inStock: boolean; isLimited: boolean; estimatedRestockTime: string | null }>('POST', '/menu/stock', { itemId, inStock, isLimited, estimatedRestockTime }, true);
 }
 
 // ---------------------------------------------------------------------------

@@ -36,47 +36,100 @@ export function StockManager({ onClose }: StockManagerProps) {
         </div>
         
         {/* Items List */}
-        <div className="overflow-y-auto max-h-[60vh] p-4 space-y-2">
+        <div className="overflow-y-auto max-h-[60vh] p-4 space-y-3">
           {menuItems.map((item) => {
-            const isInStock = menuStock[item.id] ?? item.inStock;
+            const stockInfo = menuStock[item.id] || { inStock: item.inStock };
+            const isInStock = stockInfo.inStock;
+            const isLimited = stockInfo.isLimited || false;
+            const estimatedRestockTime = stockInfo.estimatedRestockTime || '';
             
+            const handleToggleStock = async () => {
+              const newInStock = !isInStock;
+              toggleStock(item.id, { inStock: newInStock });
+              try {
+                await updateMenuStock(item.id, newInStock, isLimited, estimatedRestockTime);
+              } catch (err) {
+                console.error('Failed to update stock in backend', err);
+                toggleStock(item.id, { inStock: !newInStock });
+              }
+            };
+            
+            const handleToggleLimited = async () => {
+              const newIsLimited = !isLimited;
+              toggleStock(item.id, { isLimited: newIsLimited });
+              try {
+                await updateMenuStock(item.id, isInStock, newIsLimited, estimatedRestockTime);
+              } catch (err) {
+                toggleStock(item.id, { isLimited: !newIsLimited });
+              }
+            };
+
+            const handleTimeBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+              const newTime = e.target.value;
+              toggleStock(item.id, { estimatedRestockTime: newTime });
+              try {
+                await updateMenuStock(item.id, isInStock, isLimited, newTime);
+              } catch (err) {
+                console.error(err);
+              }
+            };
+
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50"
+                className="flex flex-col bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/50 space-y-3"
               >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-12 h-12 object-cover rounded-lg"
-                  />
-                  <div>
-                    <p className="text-white font-medium text-sm">{item.name}</p>
-                    <p className="text-zinc-500 text-xs capitalize">{item.category}</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-12 h-12 object-cover rounded-lg"
+                    />
+                    <div>
+                      <p className="text-white font-medium text-sm">{item.name}</p>
+                      <p className="text-zinc-500 text-xs capitalize">{item.category}</p>
+                    </div>
                   </div>
+                  
+                  <button
+                    onClick={handleToggleStock}
+                    className={cn(
+                      'px-4 py-2 rounded-full text-sm font-medium transition-all shrink-0',
+                      isInStock
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                    )}
+                  >
+                    {isInStock ? 'In Stock' : 'Sold Out'}
+                  </button>
                 </div>
-                
-                <button
-                  onClick={async () => {
-                    toggleStock(item.id);
-                    try {
-                      await updateMenuStock(item.id, !isInStock);
-                    } catch (err) {
-                      console.error('Failed to update stock in backend', err);
-                      // Revert on failure
-                      toggleStock(item.id);
-                    }
-                  }}
-                  className={cn(
-                    'px-4 py-2 rounded-full text-sm font-medium transition-all',
-                    isInStock
-                      ? 'bg-green-500/10 text-green-400 border border-green-500/30'
-                      : 'bg-red-500/10 text-red-400 border border-red-500/30'
+
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center pl-[60px]">
+                  {isInStock ? (
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-zinc-400">
+                      <input 
+                        type="checkbox" 
+                        checked={isLimited} 
+                        onChange={handleToggleLimited}
+                        className="rounded border-zinc-600 bg-zinc-700 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-800"
+                      />
+                      Mark as Limited Stock
+                    </label>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-400">Restock in:</span>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. 30 mins" 
+                        defaultValue={estimatedRestockTime}
+                        onBlur={handleTimeBlur}
+                        onChange={(e) => toggleStock(item.id, { estimatedRestockTime: e.target.value })}
+                        className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-sm text-white w-32 focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
                   )}
-                >
-                  {isInStock ? 'In Stock' : 'Sold Out'}
-                </button>
+                </div>
               </div>
             );
           })}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, ChefHat, Loader2, Mail, KeyRound } from 'lucide-react';
 import { useStore } from '@/store/useStore';
-import { manualLogin, initiateGoogleLogin, verifyToken } from '@/utils/api';
+import { manualLogin, initiateGoogleLogin, verifySession } from '@/utils/api';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export function AdminLoginPage() {
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
-        const result = await verifyToken();
+        const result = await verifySession();
         if (result.authenticated && result.user?.restaurantId) {
           setRestaurantId(result.user.restaurantId);
           setIsAdmin(true);
@@ -42,9 +42,9 @@ export function AdminLoginPage() {
     const emailFromUrl = searchParams.get('attempted_email');
     
     if (errorFromUrl) {
-      setError(decodeURIComponent(errorFromUrl));
+      setError(errorFromUrl);
       if (emailFromUrl) {
-        setGoogleAttemptedEmail(decodeURIComponent(emailFromUrl));
+        setGoogleAttemptedEmail(emailFromUrl);
       }
       // Clear the error from URL after displaying
       setSearchParams({}, { replace: true });
@@ -85,7 +85,7 @@ export function AdminLoginPage() {
     try {
       const currentPath = window.location.hash.slice(1) || window.location.pathname;
       const redirectPath = currentPath.includes('/admin-login') ? '/kitchen' : (currentPath || '/kitchen');
-      const { redirectUrl } = await initiateGoogleLogin('login', 'campus-delights', redirectPath);
+      const { redirectUrl } = await initiateGoogleLogin(restaurantIdInput, redirectPath);
       window.location.href = redirectUrl;
     } catch {
       setError('Google login failed. Please try again.');
@@ -175,7 +175,7 @@ export function AdminLoginPage() {
               <p className="text-red-400 text-sm font-medium">{error}</p>
               {googleAttemptedEmail && (
                 <p className="text-red-300 text-xs mt-2">
-                  <span className="font-mono">{googleAttemptedEmail}</span> is not registered as an admin.
+                  <span className="font-mono">{googleAttemptedEmail}</span> is not authorized as an admin.
                 </p>
               )}
             </div>

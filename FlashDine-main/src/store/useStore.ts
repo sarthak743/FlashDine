@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { CartItem, MenuItem, Order, CustomerDetails, Restaurant } from '@/types';
+import { persist } from 'zustand/middleware';
+import { CartItem, MenuItem, Order, CustomerDetails, Restaurant, StockInfo } from '@/types';
 
 interface StoreState {
   // Cart
@@ -45,13 +46,15 @@ interface StoreState {
   setIsAdmin: (value: boolean) => void;
   
   // Menu stock management
-  menuStock: Record<string, boolean>;
-  toggleStock: (itemId: string) => void;
-  initializeStock: (items: MenuItem[] | Record<string, boolean>) => void;
+  menuStock: Record<string, StockInfo>;
+  toggleStock: (itemId: string, info?: Partial<StockInfo>) => void;
+  initializeStock: (items: MenuItem[] | Record<string, StockInfo>) => void;
 }
 
-export const useStore = create<StoreState>((set, get) => ({
-  // Cart
+export const useStore = create<StoreState>()(
+  persist(
+    (set, get) => ({
+      // Cart
   cart: [],
   tableId: null,
   customerDetails: null,
@@ -195,29 +198,70 @@ export const useStore = create<StoreState>((set, get) => ({
   // Menu stock management
   menuStock: {},
   
-  toggleStock: (itemId) => {
-    // This is optimistically updated and backend sync should happen in the component level, 
-    // or we can just trigger it from the store if we didn't want to manage side effects there.
-    // For simplicity, we just toggle it here and let the component call API.
-    set((state) => ({
-      menuStock: {
-        ...state.menuStock,
-        [itemId]: !state.menuStock[itemId],
-      },
-    }));
+  toggleStock: (itemId, info) => {
+    set((state) => {
+      const current = state.menuStock[itemId] || { inStock: true };
+      
+      let newInStock = current.inStock;
+      if (info?.inStock !== undefined) {
+        newInStock = info.inStock;
+      } else if (!info || Object.keys(info).length === 0) {
+        newInStock = !current.inStock;
+      }
+      
+      return {
+        menuStock: {
+          ...state.menuStock,
+          [itemId]: { 
+            ...current, 
+            ...info,
+            inStock: newInStock 
+          },
+        },
+      };
+    });
   },
   
   initializeStock: (items) => {
     // If we receive an array as fallback
     if (Array.isArray(items)) {
-      const stock: Record<string, boolean> = {};
+      const stock: Record<string, StockInfo> = {};
       items.forEach((item) => {
-        stock[item.id] = item.inStock;
+        stock[item.id] = { inStock: item.inStock };
       });
       set({ menuStock: stock });
     } else {
       // Direct object assignment when fetched from backend
       set({ menuStock: items });
     }
-  },
-}));
+  }
+}),
+{
+    name: 'flashdine-storage',
+      partialize: (state) => ({
+        cart: state.cart,
+        tableId: state.tableId,
+        customerDetails: state.customerDetails,
+        orders: state.orders,
+        currentOrderId: state.currentOrderId,
+        bannedReceipts: Array.from(state.bannedReceipts),
+        restaurantId: state.restaurantId,
+        favoriteItems: Array.from(state.favoriteItems),
+        recentlyOrdered: state.recentlyOrdered,
+        isAdmin: state.isAdmin,
+      }),
+      merge: (persistedState: any, currentState: StoreState) => ({
+        ...currentState,
+        ...persistedState,
+        bannedReceipts: new Set(persistedState.bannedReceipts || []),
+        favoriteItems: new Set(persistedState.favoriteItems || []),
+        orders: (persistedState.orders || []).map((o: any) => ({
+          ...o,
+          createdAt: new Date(o.createdAt),
+          updatedAt: new Date(o.updatedAt),
+          receiptBannedAt: o.receiptBannedAt ? new Date(o.receiptBannedAt) : undefined,
+        })),
+      }),
+    }
+  )
+);

@@ -33,16 +33,15 @@ function normalizeRestaurantId(value) {
 
 function decodeGoogleState(stateValue) {
   if (!stateValue || typeof stateValue !== 'string') {
-    return { mode: 'login', restaurantId: DEFAULT_RESTAURANT_ID };
+    return { restaurantId: DEFAULT_RESTAURANT_ID };
   }
 
   try {
     const decoded = JSON.parse(Buffer.from(stateValue, 'base64url').toString('utf8'));
-    const mode = decoded?.mode === 'register' ? 'register' : 'login';
     const restaurantId = normalizeRestaurantId(decoded?.restaurantId);
-    return { mode, restaurantId };
+    return { restaurantId };
   } catch {
-    return { mode: 'login', restaurantId: DEFAULT_RESTAURANT_ID };
+    return { restaurantId: DEFAULT_RESTAURANT_ID };
   }
 }
 
@@ -119,18 +118,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           const stateRaw = (typeof req.query.state === 'string' ? req.query.state : null)
             || req.session?.googleAuthState
             || null;
-          const { mode, restaurantId } = decodeGoogleState(stateRaw);
-
-          if (mode === 'register') {
-            if (!restaurantId) {
-              return done(null, false, { message: 'Restaurant ID is required for Google registration' });
-            }
-
-            const restaurant = await getRestaurantById(restaurantId);
-            if (!restaurant) {
-              return done(null, false, { message: 'Restaurant not found' });
-            }
-          }
+          const { restaurantId } = decodeGoogleState(stateRaw);
 
           const email = profile.emails && profile.emails.length > 0 ? profile.emails[0].value : null;
           if (!email) {
@@ -140,8 +128,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           const admin = await upsertAdminGoogle(
             profile.id,
             email,
-            restaurantId,
-            mode === 'register'
+            restaurantId
           );
 
           return done(null, {
@@ -153,8 +140,8 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
         } catch (err) {
           if (err && err.code === 'GOOGLE_NOT_REGISTERED') {
             return done(null, false, { 
-              message: 'Selected Google email is not registered for admin access.',
-              attempted_email: email 
+              message: 'Selected Google email is not found for admin access.',
+              attempted_email: err.attempted_email 
             });
           }
           if (err && err.code === '23505') {

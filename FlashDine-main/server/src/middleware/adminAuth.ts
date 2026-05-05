@@ -1,35 +1,32 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 
-// Must stay in sync with the secret used in routes/auth.ts
-const JWT_SIGNING_SECRET = process.env.JWT_SECRET || 'flashdine_dev_secret_do_not_use_in_production';
-
-export interface AdminJWTPayload {
-  role: 'admin';
-  iat: number;
-  exp: number;
+interface AuthenticatedAdminUser {
+  role?: string;
+  restaurantId?: string;
 }
 
+type AdminRequest = Request & {
+  user?: AuthenticatedAdminUser;
+  isAuthenticated?: () => boolean;
+  adminRestaurantId?: string;
+};
+
 /**
- * Express middleware that verifies the admin JWT in the Authorization header.
+ * Express middleware that verifies an authenticated admin session.
  * Usage: router.patch('/orders/:id/status', requireAdmin, handler)
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing admin token' });
+  const adminReq = req as AdminRequest;
+  if (!adminReq.isAuthenticated || !adminReq.isAuthenticated()) {
+    res.status(401).json({ error: 'Authentication required' });
     return;
   }
 
-  const token = auth.slice(7);
-  try {
-    const payload = jwt.verify(token, JWT_SIGNING_SECRET) as AdminJWTPayload;
-    if (payload.role !== 'admin') {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+  if (!adminReq.user || adminReq.user.role !== 'admin') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
   }
+
+  adminReq.adminRestaurantId = adminReq.user.restaurantId;
+  next();
 }

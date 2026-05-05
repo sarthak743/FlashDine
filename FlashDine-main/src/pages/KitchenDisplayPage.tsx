@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { StockManager } from '@/components/StockManager';
 import { Clock, ChefHat, Bell, CheckCircle, RefreshCw, Package, Plus, X, Ban, LogOut } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { getRestaurantId, logout, setAdminToken, verifyToken } from '@/utils/api';
+import { getRestaurantId, logout, setAdminSessionContext, verifySession, getAllOrders, updateOrderStatus as apiUpdateOrderStatus, setEstimatedTime as apiSetEstimatedTime, banReceipt as apiBanReceipt, createOrder } from '@/utils/api';
 import { Order } from '@/types';
 
 type FilterStatus = 'all' | 'received' | 'preparing' | 'ready' | 'completed';
@@ -37,9 +37,9 @@ export function KitchenDisplayPage() {
   const [estimatedTimeInput, setEstimatedTimeInput] = useState<string>('15');
   const [selectedOrderForBan, setSelectedOrderForBan] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isVerifyingToken, setIsVerifyingToken] = useState(true);
+  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
 
-  // Check for existing auth token on mount
+  // Check for existing auth session on mount
   useEffect(() => {
     const checkAuth = async () => {
       const [, hashQuery = ''] = window.location.hash.split('?');
@@ -48,29 +48,29 @@ export function KitchenDisplayPage() {
 
       try {
         // Always verify session first so users with a valid cookie aren't prompted to log in again.
-        const result = await verifyToken();
+        const result = await verifySession();
         if (result.authenticated) {
           const resolvedRestaurantId =
             result.user?.restaurantId ||
             cachedRestaurantId ||
             DEFAULT_RESTAURANT_ID;
 
-          setAdminToken(null, resolvedRestaurantId);
+          setAdminSessionContext(resolvedRestaurantId);
           setRestaurantId(resolvedRestaurantId);
           setShowAuthModal(false);
         } else {
-          setAdminToken(null, DEFAULT_RESTAURANT_ID);
+          setAdminSessionContext(DEFAULT_RESTAURANT_ID);
           setRestaurantId(DEFAULT_RESTAURANT_ID);
           setShowAuthModal(true);
         }
       } catch {
         // No valid session: keep the default restaurant context and open auth modal.
-        setAdminToken(null, DEFAULT_RESTAURANT_ID);
+        setAdminSessionContext(DEFAULT_RESTAURANT_ID);
         setRestaurantId(DEFAULT_RESTAURANT_ID);
         setShowAuthModal(true);
       }
       
-      setIsVerifyingToken(false);
+      setIsVerifyingSession(false);
     };
     
     checkAuth();
@@ -81,13 +81,44 @@ export function KitchenDisplayPage() {
     setShowAuthModal(false);
   };
 
+  // Poll orders from backend
+  useEffect(() => {
+    if (!restaurantId || (restaurantId === DEFAULT_RESTAURANT_ID && showAuthModal)) {
+      return;
+    }
+
+    const fetchOrders = async () => {
+      try {
+        const data = await getAllOrders();
+        const mappedOrders = data.map((o: any) => ({
+          ...o,
+          createdAt: new Date(o.createdAt),
+          updatedAt: new Date(o.updatedAt),
+          receiptBannedAt: o.receiptBannedAt ? new Date(o.receiptBannedAt) : undefined,
+        }));
+        // Update global store with the fetched orders, merging them with existing orders to prevent disappearing
+        useStore.setState((state) => {
+          const fetchedIds = new Set(mappedOrders.map((o: any) => o.id));
+          const existingOtherOrders = state.orders.filter(o => !fetchedIds.has(o.id));
+          return { orders: [...mappedOrders, ...existingOtherOrders] };
+        });
+      } catch (err) {
+        console.error('Failed to fetch orders:', err);
+      }
+    };
+
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 15000);
+    return () => clearInterval(interval);
+  }, [restaurantId, showAuthModal]);
+
   const handleLogout = () => {
     logout();
     setRestaurantId(null);
     setShowAuthModal(true);
   };
 
-  const addDemoOrder = () => {
+  const addDemoOrder = async () => {
     const orderId = `FD${Date.now().toString().slice(-6)}`;
     const receiptId = `RCP${Date.now().toString().slice(-8)}`;
     const token = orders.reduce((max, order) => Math.max(max, order.token || 0), 0) + 1;
@@ -115,14 +146,36 @@ export function KitchenDisplayPage() {
       updatedAt: new Date(),
     };
     addOrder(newOrder);
+
+    try {
+      await createOrder({
+        id: orderId,
+        receiptId,
+        tableId: newOrder.tableId,
+        restaurantId: newOrder.restaurantId,
+        customerDetails: newOrder.customerDetails,
+        items: newOrder.items,
+        subtotal: 200,
+        tax: 20,
+        total: 220,
+        paymentMethod: 'upi',
+      });
+    } catch (err) {
+      console.error('Failed to create demo order in backend:', err);
+    }
   };
 
-  const handleSetEstimatedTime = (orderId: string) => {
+  const handleSetEstimatedTime = async (orderId: string) => {
     const time = parseInt(estimatedTimeInput, 10);
     if (!isNaN(time) && time > 0) {
-      updateOrderEstimatedTime(orderId, time);
+      updateOrderEstimatedTime(orderId, time); // optimistic
       setSelectedOrderForTime(null);
       setEstimatedTimeInput('15');
+      try {
+        await apiSetEstimatedTime(orderId, time);
+      } catch (err) {
+        console.error('Failed to set estimated time:', err);
+      }
     }
   };
 
@@ -149,10 +202,15 @@ export function KitchenDisplayPage() {
     }
   };
 
-  const handleStatusUpdate = (orderId: string, currentStatus: Order['status']) => {
+  const handleStatusUpdate = async (orderId: string, currentStatus: Order['status']) => {
     const nextStatus = getNextStatus(currentStatus);
     if (nextStatus) {
-      updateOrderStatus(orderId, nextStatus);
+      updateOrderStatus(orderId, nextStatus); // optimistic
+      try {
+        await apiUpdateOrderStatus(orderId, nextStatus);
+      } catch (err) {
+        console.error('Failed to update status:', err);
+      }
     }
   };
 
@@ -163,8 +221,8 @@ export function KitchenDisplayPage() {
     return `${minutes} mins ago`;
   };
 
-  // Show loading state while verifying token
-  if (isVerifyingToken) {
+  // Show loading state while verifying session
+  if (isVerifyingSession) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
@@ -496,12 +554,17 @@ export function KitchenDisplayPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedOrderForBan) {
                       const order = orders.find(o => o.id === selectedOrderForBan);
                       if (order) {
-                        banReceipt(order.receiptId);
+                        banReceipt(order.receiptId); // optimistic
                         setSelectedOrderForBan(null);
+                        try {
+                          await apiBanReceipt(order.receiptId);
+                        } catch (err) {
+                          console.error('Failed to ban receipt:', err);
+                        }
                       }
                     }
                   }}

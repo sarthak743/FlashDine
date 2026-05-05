@@ -3,6 +3,16 @@ import { MenuItem } from '@/types';
 export const menuItems: MenuItem[] = [
   // Snacks
   {
+    id: 'snack-sample-1',
+    name: 'Sample Item (₹1)',
+    description: 'Test menu item for payment and order flow checks',
+    price: 1,
+    category: 'snacks',
+    image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop',
+    inStock: true,
+    prepTime: 1,
+  },
+  {
     id: 'snack-1',
     name: 'Crispy Samosa',
     description: 'Golden fried pastry filled with spiced potatoes and peas',

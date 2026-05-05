@@ -41,8 +41,7 @@ export declare function createAdminManual(
 export declare function upsertAdminGoogle(
   googleId: string,
   email: string,
-  restaurantId: string | null | undefined,
-  isRegistrationIntent?: boolean
+  restaurantId: string | null | undefined
 ): Promise<AdminRecord>;
 export declare function getRestaurantById(
   restaurantId: string

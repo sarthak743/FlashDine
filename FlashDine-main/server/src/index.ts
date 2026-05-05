@@ -27,7 +27,7 @@ const allowedOrigins = new Set(
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (e.g., mobile apps, curl, same-origin)
       if (!origin || allowedOrigins.has(origin) || localOriginPattern.test(origin)) {
         callback(null, true);
@@ -36,7 +36,7 @@ app.use(
       }
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type'],
   })
 );
 
